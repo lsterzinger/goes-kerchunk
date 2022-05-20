@@ -1,0 +1,15 @@
+name: kerchunk
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - xarray[complete]
+  - h5py
+  - numcodecs
+  - zarr
+  - s3fs
+  - fsspec
+  - dask
+  - dask-jobqueue
+  - kerchunk
