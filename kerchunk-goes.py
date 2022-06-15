@@ -1,4 +1,6 @@
-ddimport warnings
+from operator import concat
+from typing import Concatenate
+import warnings
 warnings.filterwarnings('ignore')
 
 import fsspec
@@ -9,26 +11,43 @@ from kerchunk.hdf import SingleHdf5ToZarr
 from kerchunk.combine import MultiZarrToZarr
 from datetime import datetime
 from dask.distributed import LocalCluster
+import sys
 
 
-#################################################
-# Define year and day (single day only for now) #
-#################################################
-# year = int(input("Please input a year: "))
-# day = int(input("Please enter a day: ")) # April 11, 2020
 
-year = 2020
-day = 102 # April 11, 2020
-
-product = "ABI-L2-ACMC"
 
 ##############
 # SLURM info #
 ##############
 
-queue = 'high'
-ncpu = int(input("How many CPUs per job? (recommend 12): "))
-njobs = int(input("How many jobs to submit?: ")) # number of jobs to submit
+
+import argparse
+parser = argparse.ArgumentParser(description="Kercunk GOES data on S3")
+parser.add_argument('-p', '--product', required=True, type=str, default='ABI-L2-ACMC', help='GOES product to process (default ABI-L2-ACMC)')
+# parser.add_argument('-f', '--file', required=False, type=str, default='*', help='File wildcard (default all files \"*\")')
+parser.add_argument('-c', '--channel', required=False, type=int, default=None, help="L1b channel")
+parser.add_argument('-y', '--year', required=True, type=int, help="Year of data to process")
+parser.add_argument('-d', '--days', required=True, type=int, nargs=2, help="Day range to process (e.g. \"-d 100 101\")")
+# Optional SLURM arguments
+parser.add_argument('-n', '--ncpu', type=int, default=12, help="Number of CPUs per SLURM job (default 12)")
+parser.add_argument('-j', '--njobs', type=int, default=1, help="Number of SLURM jobs to submit (default 1)")
+parser.add_argument('-q', '--queue', type=str, default='high', help='SLURM job queue to run on (default \"high\")')
+parser.add_argument('-w', '--walltime', type=str, default='01:00:00', help='SLURM job walltime (default \"01:00:00\")')
+args1 = parser.parse_args()
+
+args=vars(args1)
+
+product = args['product']
+year = args['year']
+day1 = args['days'][0]
+day2 = args['days'][1]
+chan = args['channel']
+
+ncpu = args['ncpu']
+njobs = args['njobs']
+queue = args['queue']
+walltime = args['walltime']
+# print(args)
 
 ################
 # Do the work! #
@@ -37,12 +56,32 @@ njobs = int(input("How many jobs to submit?: ")) # number of jobs to submit
 t1 = datetime.now()
 
 if __name__ == '__main__':
+    # Set up s3 filesystem
+    fs = fsspec.filesystem('s3', anon=True)
+
+    if chan:
+        file = f'OR_{product}-M6C{chan:02}_*'
+        # get list of files for given product, year, day
+        print(f"Getting filelist for {product} (channel {chan}) from {year} {day1:03}-{day2:03}")
+
+    else:
+        # get list of files for given product, year, day
+        print(f"Getting filelist for {product} from {year} {day1:03}-{day2:03}")
+        file = "*"
+
+    flist = []
+    for d in range(day1, day2+1):
+        f = fs.glob(f"s3://noaa-goes16/{product}/{year}/{d:03}/*/{file}.nc")
+        flist =concat(flist, f)
+
+    print(f"Found {len(flist)} files")
+
     # Start a cluster on dask (use up a whole node with --exclusive)
     # this is where the actual computing of Kerchunk will happen
     print("Starting dask cluster")
     cluster = SLURMCluster(
         queue = queue,
-        walltime = '01:00:00', 
+        walltime = walltime, 
         cores = ncpu,
         n_workers=ncpu,
     )
@@ -50,14 +89,7 @@ if __name__ == '__main__':
     cluster.scale(jobs=njobs)
     client = Client(cluster)
 
-    # Set up s3 filesystem
-    fs = fsspec.filesystem('s3', anon=True)
 
-    # get list of files for given product, year, day
-    print("Getting filelist")
-    flist = fs.glob(f"s3://noaa-goes16/{product}/{year}/{day}/*/*.nc")
-
-    print(f"Found {len(flist)} files")
 
 
     # Do the parallel computation
