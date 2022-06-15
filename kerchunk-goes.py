@@ -26,6 +26,7 @@ parser = argparse.ArgumentParser(description="Kercunk GOES data on S3")
 parser.add_argument('-p', '--product', required=True, type=str, default='ABI-L2-ACMC', help='GOES product to process (default ABI-L2-ACMC)')
 # parser.add_argument('-f', '--file', required=False, type=str, default='*', help='File wildcard (default all files \"*\")')
 parser.add_argument('-c', '--channel', required=False, type=int, default=None, help="L1b channel")
+parser.add_argument('-m', '--mode', required=False, type=int, default=6, help="L1b mode")
 parser.add_argument('-y', '--year', required=True, type=int, help="Year of data to process")
 parser.add_argument('-d', '--days', required=True, type=int, nargs=2, help="Day range to process (e.g. \"-d 100 101\")")
 # Optional SLURM arguments
@@ -42,6 +43,7 @@ year = args['year']
 day1 = args['days'][0]
 day2 = args['days'][1]
 chan = args['channel']
+mode = args['mode']
 
 ncpu = args['ncpu']
 njobs = args['njobs']
@@ -60,9 +62,9 @@ if __name__ == '__main__':
     fs = fsspec.filesystem('s3', anon=True)
 
     if chan:
-        file = f'OR_{product}-M6C{chan:02}_*'
+        file = f'OR_{product}-M{mode}C{chan:02}_*'
         # get list of files for given product, year, day
-        print(f"Getting filelist for {product} (channel {chan}) from {year} {day1:03}-{day2:03}")
+        print(f"Getting filelist for {product} (mode {mode}, channel {chan}) from {year} {day1:03}-{day2:03}")
 
     else:
         # get list of files for given product, year, day
